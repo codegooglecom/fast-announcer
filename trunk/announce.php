@@ -1,31 +1,24 @@
 <?php
 
-# Данные для доступа к БД MySQL
-
-$DBHost="localhost";
-$DBUser="root";
-$DBPass="root";
-$DBName="tracker";
-
-# -------------- Дальше ничего менять не надо! --------------------------------
+require ('./common.php');
 
 define('TIMESTART', utime());
 define('TIMENOW',   time());
 
-$announce_interval = 1200;
-$expire_factor     = 4;
-$peer_expire_time  = TIMENOW - floor($announce_interval * $expire_factor);
+$announce_interval = $cfg['announce_interval'];
+$peer_expire_time  = TIMENOW - floor($cfg['announce_interval'] * $cfg['expire_factor']);
 
 if (get_magic_quotes_gpc())
 {
-	array_deep($_GET, 'stripslashes');
+	stripslashes($_GET['info_hash']);
 }
 	
-mysql_connect("$DBHost","$DBUser","$DBPass") or msg_die("Could not connect: " . mysql_error());
-mysql_select_db("$DBName");
+db_init();
 
-mysql_query("DELETE FROM tracker WHERE update_time < $peer_expire_time")
- or msg_die("MySQL error: " . mysql_error());
+if (!$cache->used || ($cache->get('next_cleanup') < TIMENOW))
+{
+	cleanup($peer_expire_time);
+}
 
 // Input var names
 // String
@@ -33,9 +26,10 @@ $input_vars_str = array(
 	'info_hash',
 	'peer_id',
 	'event',
-	'descr',
+	'name',
 	'mt',
-	'pu',
+	'comment',
+	'isp',
 );
 // Numeric
 $input_vars_num = array(
@@ -45,7 +39,7 @@ $input_vars_num = array(
 	'left',
 	'numwant',
 	'compact',
-	'l',
+	'size',
 );
 
 // Init received data
@@ -60,14 +54,12 @@ foreach ($input_vars_num as $var_name)
 	$$var_name = isset($_GET[$var_name]) ? (float) $_GET[$var_name] : null;
 }
 
-$info_hash = $_GET['info_hash'];
-
 // Verify required request params (info_hash, peer_id, port, uploaded, downloaded, left)
 if (!isset($info_hash) || strlen($info_hash) != 20)
 {
 	// Похоже, к нам зашли через браузер.
 	// Вежливо отправим человека на инструкцию по псевдотрекеру.
-	echo "<meta http-equiv=refresh content=0;url=/retracker/>";
+	echo "<meta http-equiv=refresh content=0;url=http://re-tracker.ru/>";
 	die;
 //	msg_die("Invalid info_hash: '$info_hash' length ".strlen($info_hash));
 }
@@ -129,217 +121,128 @@ $ip_sql = encode_ip($ip);
 // ----------------------------------------------------------------------------
 // Start announcer
 //
+$info_hash_hex = bin2hex($info_hash);
 $info_hash_sql = rtrim(mysql_real_escape_string($info_hash), ' ');
+
+// Peer unique id
+$peer_hash = md5(
+	rtrim($info_hash, ' ') . $peer_id . $ip . $port
+);
+
+// It's seeder?
+$seeder  = ($left == 0) ? 1 : 0;
 
 // Stopped event
 if ($event === 'stopped')
 {
-	mysql_query("DELETE FROM tracker WHERE info_hash = '$info_hash_sql' AND ip = '$ip_sql' AND port = $port")
-	 or msg_die("MySQL error: " . mysql_error());
-
+	mysql_query("DELETE FROM tracker WHERE peer_hash = '$peer_hash'") or msg_die("MySQL error: " . mysql_error());
 	die();
 }
 
-$main_tracker = "$mt";
+$mt = explode('/', $mt);
+$main_tracker =& $mt[2];
+
 // Escape strings
-$descr = mysql_real_escape_string($descr);
+$name = mysql_real_escape_string($name);
 $main_tracker = mysql_real_escape_string($main_tracker);
-$pu = mysql_real_escape_string($pu);
+$comment = mysql_real_escape_string($comment);
+
+$sql_data = array(
+	'info_hash'    => $info_hash_sql,
+	'peer_hash'    => $peer_hash,
+	'ip'           => $ip_sql,
+	'port'         => $port,
+	'seeder'       => $seeder,
+	'update_time'  => TIMENOW,
+	'name'         => $name,
+	'tracker'      => $main_tracker,
+	'ip_real'      => $ip,
+	'comment'      => $comment,
+	'pleft'        => $left,
+	'downloaded'   => $downloaded,
+	'size'         => $size,
+);
+
+$columns = $values = $dupdate = array();
+
+foreach ($sql_data as $column => $value)
+{
+	$columns[] = $column;
+	$values[]  = "'" . $value . "'";
+	$dupdate[] = $column . " = '" . $value . "'";
+}
+
+$columns_sql = implode(', ', $columns);
+$values_sql = implode(', ', $values);
+$dupdate_sql = implode(', ', $dupdate);
 
 // Update peer info
-mysql_query("DELETE FROM tracker WHERE info_hash = '$info_hash_sql' AND ip = '$ip_sql' AND port = $port")
- or msg_die("MySQL error: " . mysql_error());
-mysql_query("INSERT INTO tracker (info_hash, ip, port, update_time, descr, tracker, ip_real, publisherurl, pleft, downloaded, length)
- VALUES ('$info_hash_sql', '$ip_sql', $port, ". time() .", '$descr', '$main_tracker', '$ip', '$pu', '$left', '$downloaded', '$l')")
- or msg_die("MySQL error: " . mysql_error());
+mysql_query("INSERT INTO tracker ($columns_sql) VALUES ($values_sql)
+			ON DUPLICATE KEY UPDATE $dupdate_sql") or msg_die("MySQL error: " . mysql_error());
+
+unset($sql_data, $columns, $values, $dupdate, $columns_sql, $values_sql, $dupdate_sql);
 
 // Select peers
+$output = $cache->get(PEERS_LIST_PREFIX . $info_hash_hex);
 
-$result = mysql_query("SELECT ip, port FROM tracker WHERE info_hash = '$info_hash_sql'")
- or msg_die("MySQL error: " . mysql_error());
-
-$rowset = array();
-
-while ($row = mysql_fetch_array($result))
+if (!$output)
 {
-	$rowset[] = $row;
-}
+	$limit = (int) (($numwant > $cfg['peers_limit']) ? $cfg['peers_limit'] : $numwant);
+	$result = mysql_query("SELECT ip, port, COUNT(ip) AS peers_count, seeder
+						   FROM tracker WHERE info_hash = '$info_hash_sql' GROUP BY ip LIMIT $limit") 
+	or msg_die("MySQL error: " . mysql_error());
+	
+	$rowset = array();
+	$seeders = $leechers = 0;
 
-if ($compact_mode)
-{
-	$peers = '';
-
-	foreach ($rowset as $peer)
+	while ($row = mysql_fetch_array($result))
 	{
-		$peers .= pack('Nn', ip2long(decode_ip($peer['ip'])), $peer['port']);
-	}
-}
-else
-{
-	$peers = array();
+		$rowset[] = $row;
 
-	foreach ($rowset as $peer)
+		if($row['seeder'])
+		{
+			$seeders += 1;
+		}
+		$leechers = $row['peers_count'] - $seeders;
+	}	
+
+	$compact_mode = ($cfg['compact_always'] || !empty($compact));
+
+	if ($compact_mode)
 	{
-		$peers[] = array(
-			'ip'   => decode_ip($peer['ip']),
-			'port' => intval($peer['port']),
-		);
+		$peers = '';
+
+		foreach ($rowset as $peer)
+		{
+			$peers .= pack('Nn', ip2long(decode_ip($peer['ip'])), $peer['port']);
+		}
 	}
+	else
+	{
+		$peers = array();
+
+		foreach ($rowset as $peer)
+		{
+			$peers[] = array(
+				'ip'   => decode_ip($peer['ip']),
+				'port' => intval($peer['port']),
+			);
+		}
+	}
+
+	// Generate output
+	$output = array(
+		'interval'     => (int) $announce_interval, // tracker config: announce interval (sec?)
+		'min interval' => (int) 1, // tracker config: min interval (sec?)
+		'peers'        => $peers,
+		'complete'     => (int) $seeders,
+		'incomplete'   => (int) $leechers,
+	);
+
+	$peers_list_cached = $cache->set(PEERS_LIST_PREFIX . $info_hash_hex, $output, PEERS_LIST_EXPIRE);
 }
-
-// Generate output
-
-$output = array(
-	'interval'     => $announce_interval, // tracker config: announce interval (sec?)
-	'min interval' => $announce_interval, // tracker config: min interval (sec?)
-	'peers'        => $peers,
-);
 
 // Return data to client
 echo bencode($output);
 
 exit;
-
-// ----------------------------------------------------------------------------
-// Functions
-//
-function utime ()
-{
-	return array_sum(explode(' ', microtime()));
-}
-
-function msg_die ($msg)
-{
-	$output = bencode(array(
-		'min interval'    => (int) 60,
-		'failure reason'  => (string) $msg,
-	));
-
-	die($output);
-}
-
-function dummy_exit ($interval = 60)
-{
-	$output = bencode(array(
-		'interval'     => (int)    $interval,
-		'min interval' => (int)    $interval,
-		'peers'        => (string) DUMMY_PEER,
-	));
-
-	die($output);
-}
-
-function encode_ip ($ip)
-{
-	$d = explode('.', $ip);
-
-	return sprintf('%02x%02x%02x%02x', $d[0], $d[1], $d[2], $d[3]);
-}
-
-function decode_ip ($ip)
-{
-	return long2ip("0x{$ip}");
-}
-
-function verify_ip ($ip)
-{
-	return preg_match('#^(\d{1,3}\.){3}\d{1,3}$#', $ip);
-}
-
-function str_compact ($str)
-{
-	return preg_replace('#\s+#', ' ', trim($str));
-}
-
-function array_deep (&$var, $fn, $one_dimensional = false, $array_only = false)
-{
-	if (is_array($var))
-	{
-		foreach ($var as $k => $v)
-		{
-			if (is_array($v))
-			{
-				if ($one_dimensional)
-				{
-					unset($var[$k]);
-				}
-				else if ($array_only)
-				{
-					$var[$k] = $fn($v);
-				}
-				else
-				{
-					array_deep($var[$k], $fn);
-				}
-			}
-			else if (!$array_only)
-			{
-				$var[$k] = $fn($v);
-			}
-		}
-	}
-	else if (!$array_only)
-	{
-		$var = $fn($var);
-	}
-}
-
-// based on OpenTracker [http://whitsoftdev.com/opentracker]
-function bencode ($var)
-{
-	if (is_int($var))
-	{
-		return 'i'. $var .'e';
-	}
-	else if (is_float($var))
-	{
-		return 'i'. sprintf('%.0f', $var) .'e';
-	}
-	else if (is_array($var))
-	{
-		if (count($var) == 0)
-		{
-			return 'de';
-		}
-		else
-		{
-			$assoc = false;
-
-			foreach ($var as $key => $val)
-			{
-				if (!is_int($key) && !is_float($var))
-				{
-					$assoc = true;
-					break;
-				}
-			}
-
-			if ($assoc)
-			{
-				ksort($var, SORT_REGULAR);
-				$ret = 'd';
-
-				foreach ($var as $key => $val)
-				{
-					$ret .= bencode($key) . bencode($val);
-				}
-				return $ret .'e';
-			}
-			else
-			{
-				$ret = 'l';
-
-				foreach ($var as $val)
-				{
-					$ret .= bencode($val);
-				}
-				return $ret .'e';
-			}
-		}
-	}
-	else
-	{
-		return strlen($var) .':'. $var;
-	}
-}
-
