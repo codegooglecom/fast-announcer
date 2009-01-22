@@ -1,16 +1,8 @@
 <?php
 
-# Данные для доступа к БД MySQL
+require ('./common.php');
 
-$DBHost="localhost";
-$DBUser="tracker";
-$DBPass="";
-$DBName="tracker";
-
-# -------------- Дальше ничего менять не надо! --------------------------------
-
-mysql_connect("$DBHost","$DBUser","$DBPass") or msg_die("Could not connect: " . mysql_error());
-mysql_select_db("$DBName");
+db_init();
 
 $result = mysql_query("SELECT count(DISTINCT ip) FROM tracker")
  or msg_die("MySQL error: " . mysql_error());

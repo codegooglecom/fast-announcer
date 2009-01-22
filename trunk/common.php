@@ -41,12 +41,15 @@ function db_init()
 	mysql_select_db($cfg['dbname']);
 }
 
-function cleanup($peer_expire_time)
+function cleanup()
 {
-	global $cache, $cfg;
+	global $cache, $cfg;	
 	
 	$cache->gc();
+	
+	$peer_expire_time = TIMENOW - floor($cfg['announce_interval'] * $cfg['expire_factor']);
 	mysql_query("DELETE FROM tracker WHERE update_time < $peer_expire_time") or msg_die("MySQL error: " . mysql_error());
+	
 	$cache->set('next_cleanup', TIMENOW + $cfg['cleanup_interval']);
 }
 
