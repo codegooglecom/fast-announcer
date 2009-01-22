@@ -25,8 +25,8 @@ $cfg['cache']['memcached'] = array(
 
 $cfg['cache']['sqlite'] = array(
 	'db_file_path' => '/path/to/sqlite.cache.db',  #  /dev/shm/sqlite.db
-	'table_name'   => 'tr_cache',
-	'table_schema' => 'CREATE TABLE tr_cache (
+	'table_name'   => 'cache',
+	'table_schema' => 'CREATE TABLE cache (
 	                     cache_name        VARCHAR(255),
 	                     cache_expire_time INT,
 	                     cache_value       TEXT,

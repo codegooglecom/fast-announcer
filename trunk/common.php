@@ -1,9 +1,14 @@
 <?php
-	
+
+set_magic_quotes_runtime(0); // Disable magic_quotes_runtime 
+
 require ('./config.php');
 require ('./cache.class.php');
 
-set_magic_quotes_runtime(0); // Disable magic_quotes_runtime 
+if (get_magic_quotes_gpc())
+{
+	array_deep($_GET, 'stripslashes');
+}
 
 switch ($cfg['cache_type'])
 {
@@ -169,6 +174,39 @@ function clean_filename ($fname)
 	static $s = array('\\', '/', ':', '*', '?', '"', '<', '>', '|');
 
 	return str_replace($s, '_', $fname);
+}
+
+function array_deep (&$var, $fn, $one_dimensional = false, $array_only = false)
+{
+	if (is_array($var))
+	{
+		foreach ($var as $k => $v)
+		{
+			if (is_array($v))
+			{
+				if ($one_dimensional)
+				{
+					unset($var[$k]);
+				}
+				else if ($array_only)
+				{
+					$var[$k] = $fn($v);
+				}
+				else
+				{
+					array_deep($var[$k], $fn);
+				}
+			}
+			else if (!$array_only)
+			{
+				$var[$k] = $fn($v);
+			}
+		}
+	}
+	else if (!$array_only)
+	{
+		$var = $fn($var);
+	}
 }
 
 // based on OpenTracker [http://whitsoftdev.com/opentracker]

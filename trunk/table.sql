@@ -1,6 +1,6 @@
 DROP TABLE IF EXISTS `tracker`;
 CREATE TABLE `tracker` (
-  `info_hash` char(20) collate utf8_bin NOT NULL,
+  `info_hash` char(40) collate utf8_bin NOT NULL,
   `peer_hash` char(32) collate utf8_bin NOT NULL,
   `ip` char(8) collate utf8_bin NOT NULL,
   `port` int(11) NOT NULL,
@@ -13,6 +13,7 @@ CREATE TABLE `tracker` (
   `ip_real` varchar(32) collate utf8_bin default NULL,
   `pleft` bigint(16) default NULL,
   `downloaded` bigint(16) NOT NULL,
-  PRIMARY KEY  (`info_hash`),
-  UNIQUE KEY `peer_hash` (`peer_hash`)
+  PRIMARY KEY  (`peer_hash`),
+  KEY `info_hash` (`info_hash`),
+  FULLTEXT KEY `name` (`name`)
 ) ENGINE=MyISAM DEFAULT CHARSET=utf8 COLLATE=utf8_bin;
