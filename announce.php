@@ -6,13 +6,12 @@ define('TIMESTART', utime());
 define('TIMENOW',   time());
 
 $announce_interval = $cfg['announce_interval'];
-$peer_expire_time  = TIMENOW - floor($cfg['announce_interval'] * $cfg['expire_factor']);
 
 db_init();
 
 if (!$cache->used || ($cache->get('next_cleanup') < TIMENOW))
 {
-	cleanup($peer_expire_time);
+	cleanup();
 }
 
 // Input var names

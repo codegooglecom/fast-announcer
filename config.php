@@ -8,7 +8,7 @@ $cfg['dbname'] = "tracker";
 
 // Tracker
 $cfg['announce_interval'] = 3600;
-$cfg['expire_factor']     = 4;
+$cfg['expire_factor']     = 2;
 $cfg['peers_limit']       = 100;   // Limit peers to select from DB
 $cfg['cleanup_interval']  = 3600;  // Interval to execute cleanup
 $cfg['compact_always']    = false; // Enable compact mode always (don't check clien capability)
