@@ -202,8 +202,8 @@ class cache_file extends cache_common
 		if(file_exists($filename)) 
 		{
 			require($filename);
-		}		
-
+		}
+		
 		return (!empty($filecache['value'])) ? $filecache['value'] : false;
 	}
 
@@ -246,17 +246,17 @@ class cache_file extends cache_common
 		{
 			if ($dh = opendir($dir)) 
 			{
-				while (($file = readdir($dh)) !== false) 
+				while ((($file = readdir($dh)) !== false)) 
 				{
 					if ($file != "." && $file != "..") 
 					{ 
 						$filename = $dir . $file;
 					
-						require($filename);
+						include($filename);
 					
-						if(!empty($filecache['expire']) && ($filecache['expire'] < $expire_time))
+						if(empty($filecache['expire']) OR ($filecache['expire'] < $expire_time))
 						{
-							unlink($filename);
+							unlink($filename);							
 						}
 					}
 				}
