@@ -8,11 +8,6 @@ define('TIMENOW',   time());
 $announce_interval = $cfg['announce_interval'];
 $peer_expire_time  = TIMENOW - floor($cfg['announce_interval'] * $cfg['expire_factor']);
 
-if (get_magic_quotes_gpc())
-{
-	stripslashes($_GET['info_hash']);
-}
-	
 db_init();
 
 if (!$cache->used || ($cache->get('next_cleanup') < TIMENOW))
@@ -59,9 +54,9 @@ if (!isset($info_hash) || strlen($info_hash) != 20)
 {
 	// Похоже, к нам зашли через браузер.
 	// Вежливо отправим человека на инструкцию по псевдотрекеру.
-	echo "<meta http-equiv=refresh content=0;url=http://re-tracker.ru/>";
-	die;
-//	msg_die("Invalid info_hash: '$info_hash' length ".strlen($info_hash));
+	//echo ;
+	//die;
+	msg_die("Invalid info_hash: '$info_hash' length ".strlen($info_hash)." <meta http-equiv=refresh content=0;url=http://re-tracker.ru/>");
 }
 if (!isset($peer_id) || strlen($peer_id) != 20)
 {
@@ -148,7 +143,7 @@ $main_tracker = mysql_real_escape_string($main_tracker);
 $comment = mysql_real_escape_string($comment);
 
 $sql_data = array(
-	'info_hash'    => $info_hash_sql,
+	'info_hash'    => $info_hash_hex,
 	'peer_hash'    => $peer_hash,
 	'ip'           => $ip_sql,
 	'port'         => $port,
@@ -178,7 +173,7 @@ $dupdate_sql = implode(', ', $dupdate);
 
 // Update peer info
 mysql_query("INSERT INTO tracker ($columns_sql) VALUES ($values_sql)
-			ON DUPLICATE KEY UPDATE $dupdate_sql") or msg_die("MySQL error: " . mysql_error());
+			ON DUPLICATE KEY UPDATE $dupdate_sql") or msg_die("MySQL error: " . mysql_error() .' line '. __LINE__);
 
 unset($sql_data, $columns, $values, $dupdate, $columns_sql, $values_sql, $dupdate_sql);
 
@@ -188,9 +183,10 @@ $output = $cache->get(PEERS_LIST_PREFIX . $info_hash_hex);
 if (!$output)
 {
 	$limit = (int) (($numwant > $cfg['peers_limit']) ? $cfg['peers_limit'] : $numwant);
-	$result = mysql_query("SELECT ip, port, COUNT(ip) AS peers_count, seeder
-						   FROM tracker WHERE info_hash = '$info_hash_sql' GROUP BY ip LIMIT $limit") 
-	or msg_die("MySQL error: " . mysql_error());
+	
+	$result = mysql_query("SELECT ip, port, seeder
+						   FROM tracker WHERE info_hash = '$info_hash_hex' GROUP BY ip LIMIT $limit") 
+	or msg_die("MySQL error: " . mysql_error() .' line '. __LINE__);
 	
 	$rowset = array();
 	$seeders = $leechers = 0;
@@ -201,10 +197,10 @@ if (!$output)
 
 		if($row['seeder'])
 		{
-			$seeders += 1;
+			$seeders++;
 		}
-		$leechers = $row['peers_count'] - $seeders;
-	}	
+	}
+	$leechers = count($rowset) - $seeders;
 
 	$compact_mode = ($cfg['compact_always'] || !empty($compact));
 
