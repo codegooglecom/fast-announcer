@@ -2,9 +2,6 @@
 
 require ('./common.php');
 
-define('TIMESTART', utime());
-define('TIMENOW',   time());
-
 $announce_interval = $cfg['announce_interval'];
 
 db_init();
@@ -81,9 +78,9 @@ if (!isset($left) || $left < 0)
 // IP
 $ip = $_SERVER['REMOTE_ADDR'];
 
-if (!$tr_cfg['ignore_reported_ip'] && isset($_GET['ip']) && $ip !== $_GET['ip'])
+if (!$cfg['ignore_reported_ip'] && isset($_GET['ip']) && $ip !== $_GET['ip'])
 {
-	if (!$tr_cfg['verify_reported_ip'])
+	if (!$cfg['verify_reported_ip'])
 	{
 		$ip = $_GET['ip'];
 	}
@@ -93,7 +90,7 @@ if (!$tr_cfg['ignore_reported_ip'] && isset($_GET['ip']) && $ip !== $_GET['ip'])
 		{
 			if ($x_ip === $_GET['ip'])
 			{
-				if (!$tr_cfg['allow_internal_ip'] && preg_match("#^(10|172\.16|192\.168)\.#", $x_ip))
+				if (!$cfg['allow_internal_ip'] && preg_match("#^(10|172\.16|192\.168)\.#", $x_ip))
 				{
 					break;
 				}
@@ -136,6 +133,9 @@ if ($event === 'stopped')
 $mt = explode('/', $mt);
 $main_tracker =& $mt[2];
 
+$isp = explode(' ', $isp);
+$city = 
+
 // Escape strings
 $name = mysql_real_escape_string($name);
 $main_tracker = mysql_real_escape_string($main_tracker);
@@ -144,17 +144,18 @@ $comment = mysql_real_escape_string($comment);
 $sql_data = array(
 	'info_hash'    => $info_hash_hex,
 	'peer_hash'    => $peer_hash,
-	'ip'           => $ip_sql,
+	'ip'           => $ip,
 	'port'         => $port,
 	'seeder'       => $seeder,
 	'update_time'  => TIMENOW,
 	'name'         => $name,
 	'tracker'      => $main_tracker,
-	'ip_real'      => $ip,
 	'comment'      => $comment,
 	'pleft'        => $left,
 	'downloaded'   => $downloaded,
 	'size'         => $size,
+	'city'         => !empty($isp[0]) ? $isp[0] : null,
+	'isp'          => !empty($isp[1]) ? $isp[1] : null,
 );
 
 $columns = $values = $dupdate = array();
@@ -190,52 +191,57 @@ if (!$output)
 	$rowset = array();
 	$seeders = $leechers = 0;
 
-	while ($row = mysql_fetch_array($result))
+	while ($row = mysql_fetch_assoc($result))
 	{
-		$rowset[] = $row;
-
 		if($row['seeder'])
 		{
 			$seeders++;
 		}
+		unset($row['seeder']);
+		
+		$rowset[] = $row;
 	}
 	$leechers = count($rowset) - $seeders;
-
-	$compact_mode = ($cfg['compact_always'] || !empty($compact));
-
-	if ($compact_mode)
-	{
-		$peers = '';
-
-		foreach ($rowset as $peer)
-		{
-			$peers .= pack('Nn', ip2long(decode_ip($peer['ip'])), $peer['port']);
-		}
-	}
-	else
-	{
-		$peers = array();
-
-		foreach ($rowset as $peer)
-		{
-			$peers[] = array(
-				'ip'   => decode_ip($peer['ip']),
-				'port' => intval($peer['port']),
-			);
-		}
-	}
-
-	// Generate output
+	
 	$output = array(
 		'interval'     => (int) $announce_interval, // tracker config: announce interval (sec?)
 		'min interval' => (int) 1, // tracker config: min interval (sec?)
-		'peers'        => $peers,
+		'peers'        => $rowset,
 		'complete'     => (int) $seeders,
 		'incomplete'   => (int) $leechers,
 	);
-
+	
 	$peers_list_cached = $cache->set(PEERS_LIST_PREFIX . $info_hash_hex, $output, PEERS_LIST_EXPIRE);
 }
+
+// Generate output
+$compact_mode = ($cfg['compact_always'] || !empty($compact));
+
+if ($compact_mode)
+{
+	$peers = '';
+
+	foreach ($output['peers'] as $peer)
+	{
+		$peers .= pack('Nn', ip2long($peer['ip']), $peer['port']);
+	}
+	
+	$output['peers'] = $peers;
+}
+/*
+else
+{
+	$peers = array();
+
+	foreach ($output['peers'] as $peer)
+	{
+		$peers[] = array(
+			'ip'   => decode_ip($peer['ip']),
+			'port' => intval($peer['port']),
+		);
+	}
+}
+*/
 
 // Return data to client
 echo bencode($output);

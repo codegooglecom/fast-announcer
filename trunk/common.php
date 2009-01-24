@@ -1,5 +1,8 @@
 <?php
 
+define('TIMESTART', utime());
+define('TIMENOW',   time());
+
 set_magic_quotes_runtime(0); // Disable magic_quotes_runtime 
 
 require ('./config.php');

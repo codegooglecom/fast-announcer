@@ -7,11 +7,14 @@ $cfg['dbpass'] = "root";
 $cfg['dbname'] = "tracker";
 
 // Tracker
-$cfg['announce_interval'] = 3600;
-$cfg['expire_factor']     = 2;
-$cfg['peers_limit']       = 100;   // Limit peers to select from DB
-$cfg['cleanup_interval']  = 3600;  // Interval to execute cleanup
-$cfg['compact_always']    = false; // Enable compact mode always (don't check clien capability)
+$cfg['announce_interval']  = 3600;
+$cfg['expire_factor']      = 2;
+$cfg['peers_limit']        = 100;   // Limit peers to select from DB
+$cfg['cleanup_interval']   = 3600;  // Interval to execute cleanup
+$cfg['compact_always']     = false; // Enable compact mode always (don't check clien capability)
+$cfg['ignore_reported_ip'] = false; // Ignore IP from GET query
+$cfg['allow_internal_ip']  = true;  // Allow IP from local, etc
+$cfg['verify_reported_ip'] = false; // Verify reported IP?
 
 // Cache
 $cfg['cache_type']  = 'filecache';  // Available cache types: none, APC, memcached, sqlite, filecache
