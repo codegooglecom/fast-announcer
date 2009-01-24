@@ -134,7 +134,6 @@ $mt = explode('/', $mt);
 $main_tracker =& $mt[2];
 
 $isp = explode(' ', $isp);
-$city = 
 
 // Escape strings
 $name = mysql_real_escape_string($name);
