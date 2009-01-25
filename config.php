@@ -50,3 +50,6 @@ define('PEERS_LIST_EXPIRE', round($cfg['announce_interval'] * 0.7));  // sec
 
 // Misc
 define('DBG_LOG',   false); // Debug log
+	
+// Torrents list
+define('STATS_EXPIRE', 1200);  // sec

@@ -1,6 +1,8 @@
 DROP TABLE IF EXISTS `tracker`;
 CREATE TABLE `tracker` (
   `info_hash` char(40) collate utf8_bin NOT NULL,
+  `seeders` mediumint(8) NOT NULL default '0',
+  `leechers` mediumint(8) NOT NULL default '0',
   `peer_hash` char(32) collate utf8_bin NOT NULL,
   `ip` char(15) collate utf8_bin NOT NULL,
   `port` int(11) NOT NULL,

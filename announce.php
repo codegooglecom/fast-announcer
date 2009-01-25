@@ -183,24 +183,38 @@ if (!$output)
 {
 	$limit = (int) (($numwant > $cfg['peers_limit']) ? $cfg['peers_limit'] : $numwant);
 	
-	$result = mysql_query("SELECT ip, port, seeder
+	$result = mysql_query("SELECT seeders, leechers, ip, port, seeder
 						   FROM tracker WHERE info_hash = '$info_hash_hex' GROUP BY ip LIMIT $limit") 
 	or msg_die("MySQL error: " . mysql_error() .' line '. __LINE__);
 	
 	$rowset = array();
 	$seeders = $leechers = 0;
+	$seeders_old = $leechers_old = array();
 
 	while ($row = mysql_fetch_assoc($result))
 	{
+		$seeders_old[]  = $row['seeders'];
+		$leechers_old[] = $row['leechers'];
+		
 		if($row['seeder'])
 		{
 			$seeders++;
 		}
-		unset($row['seeder']);
+		unset($row['seeder'], $row['seeders'], $row['leechers']);
 		
 		$rowset[] = $row;
 	}
 	$leechers = count($rowset) - $seeders;
+
+	if ((max($seeders_old) <> $seeders) || (max($leechers_old) <> $leechers))
+	{
+		mysql_query("UPDATE tracker SET
+					seeders  = $seeders,
+					leechers = $leechers
+					WHERE info_hash = '$info_hash_hex'") 
+		or msg_die("MySQL error: " . mysql_error() .' line '. __LINE__);		
+	}
+	unset($seeders_old, $leechers_old);
 	
 	$output = array(
 		'interval'     => (int) $announce_interval, // tracker config: announce interval (sec?)
