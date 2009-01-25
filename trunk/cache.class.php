@@ -242,13 +242,13 @@ class cache_file extends cache_common
 	{
 		$dir = $this->dir;
 		
-		if (is_dir($dir)) 
+		if (is_dir($dir))
 		{
-			if ($dh = opendir($dir)) 
+			if ($dh = opendir($dir))
 			{
-				while ((($file = readdir($dh)) !== false)) 
+				while ((($file = readdir($dh)) !== false))
 				{
-					if ($file != "." && $file != "..") 
+					if ($file != "." && $file != "..")
 					{ 
 						$filename = $dir . $file;
 					
@@ -256,7 +256,7 @@ class cache_file extends cache_common
 					
 						if(empty($filecache['expire']) OR ($filecache['expire'] < $expire_time))
 						{
-							unlink($filename);							
+							unlink($filename);					
 						}
 					}
 				}
